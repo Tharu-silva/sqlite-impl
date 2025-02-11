@@ -7,6 +7,7 @@
 #include <fstream> 
 #include <iostream>
 #include <cassert>
+#include <exception>
 
 std::unique_ptr<FieldMap> SqlDB::get_dbinfo()
 {
@@ -19,7 +20,7 @@ std::unique_ptr<FieldMap> SqlDB::get_dbinfo()
     }
 
     //Extract the magic string + null term (16 bytes)
-    DB_Field magic_str {"magic string", "string"};
+    DB_Field magic_str {"magic string", Field_type::STRING};
 
     char byte {};
     int str_idx = 0;
@@ -33,7 +34,7 @@ std::unique_ptr<FieldMap> SqlDB::get_dbinfo()
     assert(str_idx == MAGIC_STR_SIZE && byte == '\0' && "Magic string read incorrectly");
 
     //Extract page size (2-byte) (big-endian)
-    DB_Field page_sz {"page size", "integer"};
+    DB_Field page_sz {"page size", Field_type::INTEGER};
     int sz_idx = 0;
     while (sz_idx < PAGE_SZ_SIZE && file.read(&byte, 1))
     {
@@ -48,4 +49,30 @@ std::unique_ptr<FieldMap> SqlDB::get_dbinfo()
     fieldMap->insert({"page size", page_sz});
 
     return fieldMap;
+}
+
+std::variant<std::string, int, double> SqlDB::get_field(const DB_Field& db_field)
+{
+    switch (db_field.dtype)
+    {
+        case Field_type::STRING:
+        {
+            std::string value {};
+            for (const auto& byte: db_field.value)
+                value.push_back(static_cast<uint8_t>(byte));
+            return value; 
+        }
+        case Field_type::INTEGER:
+        {
+            int value {}; //MSB at lowest idx
+            value = db_field.value[0] << 8 | db_field.value[1]; 
+            return value; 
+        }
+        case Field_type::DOUBLE:
+        {
+            double value {};
+            throw std::runtime_error("Unimplemented");
+            return value;
+        }
+    }
 }
